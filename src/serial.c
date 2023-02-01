@@ -17,7 +17,8 @@
 
 #define UART_DEVICE_NODE DT_CHOSEN(zephyr_shell_uart)
 
-// Queue to store up to 10 messages (aligned to 4-byte boundary)
+// Queue to store up to 10 messages (aligned to 4-byte boundary). Needed to
+// pass data from UART ISR to main thread.
 K_MSGQ_DEFINE(uart_msgq, MSG_SIZE, 10, 4);
 
 // Get UART device from device tree

@@ -17,14 +17,31 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/types.h>
 
+#include "utils.h"
+
 LOG_MODULE_REGISTER(bluetooth);
 
 #define DEVICE_NAME "GPS Beacon"
 #define DEVICE_NAME_LEN (sizeof(DEVICE_NAME) - 1)
 
 // Bluetooth advertising data and flags
-static int bt_payload_x = 0;
-static int bt_payload_y = 0;
+struct PositionData {
+    // 4 bytes for latitude, in units of 1/10000000 of a degree.
+    // Positive values are north of the equator, negative values are south.
+    // The range of values is, therefore, from -900000000 to 900000000.
+    // This results in a worst-case precision of 11.1 mm (at the equator).
+    // See: https://en.wikipedia.org/wiki/Decimal_degrees
+    // This is clearly overkill for a GPS beacon, but it maximises the
+    // utilisation of the 4 bytes available in the advertising packet.
+    long latitude;
+    // 4 bytes for longitude, in units of 1/10000000 of a degree as above.
+    // Positive values are east of the prime meridian, negative values are west.
+    long longitude;
+    // 2 bytes for altitude, in meters. This results in a range of -32768 to
+    // 32767 meters, with a precision of 1 meter.
+    int altitude;
+};
+struct PositionData pos_data;
 static bool bt_ad_initialized = false;
 bool bt_advertising = false;
 
@@ -39,9 +56,10 @@ static void bt_ready(int err);
 
 int bt_initialise() { return bt_enable(bt_ready); }
 
-void bt_set_payload_data(int x, int y) {
-    bt_payload_x = x;
-    bt_payload_y = y;
+void bt_set_payload_data(long latitude, long longitude, int altitude) {
+    pos_data.latitude = latitude;
+    pos_data.longitude = longitude;
+    pos_data.altitude = altitude;
     bt_ad_initialized = true;
 }
 
@@ -59,8 +77,16 @@ int bt_advertise_start_or_update() {
     // Create advertising data packet
     struct bt_data ad[] = {
         BT_DATA_BYTES(BT_DATA_FLAGS, BT_LE_AD_NO_BREDR),
-        BT_DATA_BYTES(BT_DATA_MANUFACTURER_DATA, 0x0F, 0x02,  // Comodule ID
-                      bt_payload_x, bt_payload_y)};
+        BT_DATA_BYTES(
+            BT_DATA_MANUFACTURER_DATA, 0x0F, 0x02,  // Comodule GMBH company ID
+            // Split the 4-byte latitude and longitude into 4 1-byte values
+            // and put them in the advertising packet in big-endian order
+            GET_BYTE(3, pos_data.latitude), GET_BYTE(2, pos_data.latitude),
+            GET_BYTE(1, pos_data.latitude), GET_BYTE(0, pos_data.latitude),
+            GET_BYTE(3, pos_data.longitude), GET_BYTE(2, pos_data.longitude),
+            GET_BYTE(1, pos_data.longitude), GET_BYTE(0, pos_data.longitude),
+            // Same for the 2-byte altitude value
+            GET_BYTE(1, pos_data.altitude), GET_BYTE(0, pos_data.altitude))};
 
     if (!bt_advertising) {
         err = bt_le_adv_start(BT_LE_ADV_NCONN_IDENTITY, ad, ARRAY_SIZE(ad), sd,
@@ -93,7 +119,4 @@ static void bt_ready(int err) {
         return;
     }
     LOG_INF("Bluetooth initialized");
-    // Test code
-    // bt_set_payload_data(0, 0);
-    // bt_advertise();
 }

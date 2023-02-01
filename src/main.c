@@ -9,6 +9,7 @@
  *
  */
 
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #include <zephyr/kernel.h>
@@ -19,6 +20,7 @@
 
 #include "bluetooth.h"
 #include "serial.h"
+#include "utils.h"
 
 LOG_MODULE_REGISTER(main);
 
@@ -28,25 +30,29 @@ LOG_MODULE_REGISTER(main);
  * @param cmd Command string
  *
  * @retval 0 Command parsed successfully
- * @retval -EINVAL Unrecognised command/missing arguments
+ * @retval ERROR_MISSING_ARGUMENTS Command is missing arguments
+ * @retval ERROR_INVALID_ARGUMENTS Command has invalid arguments
+ * @retval ERROR_UNRECOGNISED_CMD Command is unrecognised
  */
 int parse_cmd(char *cmd) {
     int err = 0;
     char *token;
     char *saveptr;
 
-    token = strtok_r(cmd, " ", &saveptr);
+    // Split the command by spaces
+    token = strtok_r(cmd, CMD_SEPARATOR, &saveptr);
 
     if (strcmp(token, "help") == 0) {
         printk("Available commands:\r\n");
         printk("  ad-start - Start advertising\r\n");
         printk("  ad-stop - Stop advertising\r\n");
         printk("  help - Print this help message\r\n");
-        printk("  pos-set x y - Set position to x and y\r\n");
+        printk(
+            "  pos-set lat lon alt - Set latitude, longitude and altitude\r\n");
     } else if (strcmp(token, "ad-start") == 0) {
         if (bt_advertising) {
             printk("OK: Advertising already started\r\n");
-            return 0;
+            return SUCCESS;
         }
         err = bt_advertise_start_or_update();
         if (!err) {
@@ -57,7 +63,7 @@ int parse_cmd(char *cmd) {
     } else if (strcmp(token, "ad-stop") == 0) {
         if (!bt_advertising) {
             printk("OK: Advertising already stopped\r\n");
-            return 0;
+            return SUCCESS;
         }
         err = bt_advertise_stop();
         if (!err) {
@@ -67,28 +73,48 @@ int parse_cmd(char *cmd) {
             printk("ERROR: Failed to stop advertising (code %d)\r\n", err);
         }
     } else if (strcmp(token, "pos-set") == 0) {
-        token = strtok_r(NULL, " ", &saveptr);
+        // Parse latitude
+        token = strtok_r(NULL, CMD_SEPARATOR, &saveptr);
         if (token == NULL) {
-            printk("Missing argument: x\r\n");
-            return -EINVAL;
+            printk("Missing argument: latitude\r\n");
+            return ERROR_MISSING_ARGUMENTS;
         }
-        int x = atoi(token);
-        token = strtok_r(NULL, " ", &saveptr);
+        long lat = coord_to_fixed_point(token);
+        // Check if latitude is valid and between -90 and 90 degrees
+        if (lat == ERROR_INVALID_COORDINATE || lat > 900000000 ||
+            lat < -900000000) {
+            printk("Invalid argument: latitude\r\n");
+            return ERROR_INVALID_ARGUMENTS;
+        }
+        // Parse longitude
+        token = strtok_r(NULL, CMD_SEPARATOR, &saveptr);
         if (token == NULL) {
-            printk("Missing argument: y\r\n");
-            return -EINVAL;
+            printk("Missing argument: longitude\r\n");
+            return ERROR_MISSING_ARGUMENTS;
         }
-        int y = atoi(token);
+        long lon = coord_to_fixed_point(token);
+        if (lon == ERROR_INVALID_COORDINATE || lon > 1800000000 ||
+            lon < -1800000000) {
+            printk("Invalid argument: longitude\r\n");
+            return ERROR_INVALID_ARGUMENTS;
+        }
+        // Parse altitude
+        token = strtok_r(NULL, CMD_SEPARATOR, &saveptr);
+        if (token == NULL) {
+            printk("Missing argument: altitude\r\n");
+            return ERROR_MISSING_ARGUMENTS;
+        }
+        int alt = atoi(token);
 
-        bt_set_payload_data(x, y);
+        bt_set_payload_data(lat, lon, alt);
         // Only update advertising if it is already started
         if (bt_advertising) {
             bt_advertise_start_or_update();
         }
-        printk("OK: Set position to x=%d, y=%d\r\n", x, y);
+        printk("OK: Set position to %ld, %ld, %d\r\n", lat, lon, alt);
     } else {
         printk("Unknown command: %s\r\n", token);
-        return -EINVAL;
+        return ERROR_UNRECOGNISED_CMD;
     }
     return err;
 }

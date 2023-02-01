@@ -48,9 +48,12 @@ int bt_advertise_stop();
 /**
  * @brief Set the payload data to be sent in the Bluetooth advertising packet
  *
- * @param x X coordinate of the current position
- * @param y Y coordinate of the current position
+ * @param latitude Latitude in degrees * 1e7. Positive values are north,
+ *  negative values are south.
+ * @param longitude Longitude in degrees * 1e7. Positive values are east,
+ *  negative values are west.
+ * @param altitude Altitude in meters
  */
-void bt_set_payload_data(int x, int y);
+void bt_set_payload_data(long latitude, long longitude, int altitude);
 
 #endif  // GPS_BEACON_SRC_BLUETOOTH_H_
