@@ -12,7 +12,7 @@
 #ifndef GPS_BEACON_SRC_SERIAL_H_
 #define GPS_BEACON_SRC_SERIAL_H_
 
-#define MSG_SIZE 32
+#define MSG_SIZE 40
 
 extern char serial_buffer[MSG_SIZE];
 
