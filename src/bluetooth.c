@@ -1,9 +1,20 @@
+/**
+ * @file bluetooth.c
+ * @author Siim Lepik (siim.lepik@gmail.com)
+ * @brief Bluetooth interface implementation
+ * @version 0.1
+ * @date 2023-02-01
+ *
+ * @copyright Copyright (c) 2023
+ *
+ */
+
 #include "bluetooth.h"
 
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/hci.h>
-#include <zephyr/logging/log.h>
 #include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
 #include <zephyr/types.h>
 
 LOG_MODULE_REGISTER(bluetooth);
@@ -26,9 +37,7 @@ static void bt_ready(int err);
 
 // Public functions
 
-int bt_initialise() {
-    return bt_enable(bt_ready);
-}
+int bt_initialise() { return bt_enable(bt_ready); }
 
 void bt_set_payload_data(int x, int y) {
     bt_payload_x = x;
@@ -74,9 +83,7 @@ int bt_advertise_start_or_update() {
     return 0;
 }
 
-int bt_advertise_stop() {
-    return bt_le_adv_stop();
-}
+int bt_advertise_stop() { return bt_le_adv_stop(); }
 
 // Private functions
 

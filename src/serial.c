@@ -1,3 +1,14 @@
+/**
+ * @file serial.c
+ * @author Siim Lepik (siim.lepik@gmail.com)
+ * @brief Serial interface implementation
+ * @version 0.1
+ * @date 2023-02-01
+ *
+ * @copyright Copyright (c) 2023
+ *
+ */
+
 #include "serial.h"
 
 #include <zephyr/device.h>

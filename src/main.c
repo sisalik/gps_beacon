@@ -22,15 +22,20 @@
 
 LOG_MODULE_REGISTER(main);
 
+/**
+ * @brief Parse a command from the serial interface
+ *
+ * @param cmd Command string
+ *
+ * @retval 0 Command parsed successfully
+ * @retval -EINVAL Unrecognised command/missing arguments
+ */
 int parse_cmd(char *cmd) {
     int err = 0;
     char *token;
     char *saveptr;
 
     token = strtok_r(cmd, " ", &saveptr);
-    if (token == NULL) {
-        return -1;
-    }
 
     if (strcmp(token, "help") == 0) {
         printk("Available commands:\r\n");
