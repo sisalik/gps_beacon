@@ -9,12 +9,8 @@
  *
  */
 
-#include <errno.h>
-#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
-#include <zephyr/bluetooth/bluetooth.h>
-#include <zephyr/bluetooth/hci.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/uart.h>
 #include <zephyr/kernel.h>
@@ -23,10 +19,9 @@
 #include <zephyr/sys/util.h>
 #include <zephyr/types.h>
 
-LOG_MODULE_REGISTER(main);
+#include "bluetooth.h"
 
-#define DEVICE_NAME "GPS Beacon"
-#define DEVICE_NAME_LEN (sizeof(DEVICE_NAME) - 1)
+LOG_MODULE_REGISTER(main);
 
 #define UART_DEVICE_NODE DT_CHOSEN(zephyr_shell_uart)
 #define MSG_SIZE 32
@@ -39,20 +34,6 @@ static const struct device *const uart_dev = DEVICE_DT_GET(UART_DEVICE_NODE);
 // Receive buffer used in UART ISR callback
 static char rx_buf[MSG_SIZE];
 static int rx_buf_pos;
-
-// Bluetooth advertising data and flags
-static int bt_payload_x = 0;
-static int bt_payload_y = 0;
-static bool bt_ad_initialized = false;
-static bool bt_advertising = false;
-
-// Set Scan Response data (constant)
-static const struct bt_data sd[] = {
-    BT_DATA(BT_DATA_NAME_COMPLETE, DEVICE_NAME, DEVICE_NAME_LEN)};
-
-// Declaration of functions
-int bt_advertise(void);
-void bt_set_payload_data(int x, int y);
 
 int parse_cmd(char *cmd) {
     int err = 0;
@@ -75,7 +56,7 @@ int parse_cmd(char *cmd) {
             printk("OK: Advertising already started\r\n");
             return 0;
         }
-        err = bt_advertise();
+        err = bt_advertise_start_or_update();
         if (!err) {
             printk("OK: Advertising started\r\n");
         } else {
@@ -86,7 +67,7 @@ int parse_cmd(char *cmd) {
             printk("OK: Advertising already stopped\r\n");
             return 0;
         }
-        err = bt_le_adv_stop();
+        err = bt_advertise_stop();
         if (!err) {
             printk("OK: Advertising stopped\r\n");
             bt_advertising = false;
@@ -108,8 +89,9 @@ int parse_cmd(char *cmd) {
         int y = atoi(token);
 
         bt_set_payload_data(x, y);
+        // Only update advertising if it is already started
         if (bt_advertising) {
-            bt_advertise();
+            bt_advertise_start_or_update();
         }
         printk("OK: Set position to x=%d, y=%d\r\n", x, y);
     } else {
@@ -148,73 +130,7 @@ void serial_cb(const struct device *dev, void *user_data) {
     }
 }
 
-void bt_set_payload_data(int x, int y) {
-    // static const uint8_t payload[] = {0x0F, 0x02, x, y};
-    // // payload[2] = x;
-    // // payload[3] = y;
-    // static struct bt_data new_ad[] = {
-    //     BT_DATA_BYTES(BT_DATA_FLAGS, BT_LE_AD_NO_BREDR),
-    //     BT_DATA(BT_DATA_MANUFACTURER_DATA, payload, sizeof(payload))};
-    // // Deep copy the new data
-    // memcpy(ad, new_ad, sizeof(ad));
-    // // for (int i = 0; i < ARRAY_SIZE(new_ad); i++) {
-    // //     memcpy(&ad[i], &new_ad[i], sizeof(ad[i]));
-    // // }
-    bt_payload_x = x;
-    bt_payload_y = y;
-    bt_ad_initialized = true;
-}
-
-int bt_advertise(void) {
-    int err;
-    char addr_s[BT_ADDR_LE_STR_LEN];
-    bt_addr_le_t addr = {0};
-    size_t count = 1;
-
-    if (!bt_ad_initialized) {
-        LOG_ERR("Advertising data not initialized");
-        return -1;
-    }
-
-    // Create advertising data packet
-    struct bt_data ad[] = {
-        BT_DATA_BYTES(BT_DATA_FLAGS, BT_LE_AD_NO_BREDR),
-        BT_DATA_BYTES(BT_DATA_MANUFACTURER_DATA, 0x0F, 0x02,  // Comodule ID
-                      bt_payload_x, bt_payload_y)};
-
-    if (!bt_advertising) {
-        err = bt_le_adv_start(BT_LE_ADV_NCONN_IDENTITY, ad, ARRAY_SIZE(ad), sd,
-                              ARRAY_SIZE(sd));
-    } else {
-        err = bt_le_adv_update_data(ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
-    }
-
-    if (err) {
-        LOG_ERR("Advertising failed to %s (err %d)\r\n",
-                bt_advertising ? "update" : "start", err);
-        return err;
-    }
-    bt_advertising = true;
-
-    // Get the device address for logging
-    bt_id_get(&addr, &count);
-    bt_addr_le_to_str(&addr, addr_s, sizeof(addr_s));
-    LOG_INF("Beacon started, advertising as %s", addr_s);
-    return 0;
-}
-
-static void bt_ready(int err) {
-    if (err) {
-        LOG_ERR("Bluetooth init failed (err %d)\n", err);
-        return;
-    }
-    LOG_INF("Bluetooth initialized");
-    // Test code
-    // bt_set_payload_data(0, 0);
-    // bt_advertise();
-}
-
-void main(void) {
+void main() {
     int err;
     char tx_buf[MSG_SIZE];
 
@@ -223,7 +139,7 @@ void main(void) {
     uart_irq_rx_enable(uart_dev);
 
     // Initialize the Bluetooth Subsystem
-    err = bt_enable(bt_ready);
+    err = bt_initialise();
     if (err) {
         LOG_ERR("Bluetooth init failed (err %d)\n", err);
         printk("Bluetooth init failed (err %d)\n", err);
